@@ -1,2 +1,20 @@
-on:
+name: CI Checks
+on: [push, pull_request]  # Запуск при пуше и в PR
+
 jobs:
+  lint-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20  # или ваша версия Node.js
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run linter (ESLint)
+        run: npx eslint .  # Проверка стиля кода
+
+      - name: Build project
+        run: npm run build
