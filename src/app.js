@@ -7,62 +7,54 @@ import resources from './locales/index.js';
 import parseRSS from './parser.js';
 import {
   renderFeed,
-  renderFeedback,
+  renderPosts,
+  renderLanguage, renderFeedback,
+  renderModals,
   handleFormAccessibility,
   handleErrors,
 } from './view.js';
 
 const downloadFeed = (url) => axios
   .get(`https://allorigins.hexlet.app/get?disableCache=true&url=${encodeURIComponent(url)}`)
-  .then((response) => {
-    if (!response.data?.contents) {
-      throw new Error('Invalid RSS feed: empty contents');
-    }
-    return response.data.contents;
-  });
+  .then((responce) => responce.data.contents);
 
 const updatePosts = (watchedState) => {
   const links = watchedState.parsedFeeds.map((feed) => feed.feedsURL);
-  const promises = links.map((link) =>
-    downloadFeed(link)
-      .then((response) => {
-        const { loadedPosts } = parseRSS(response, link);
-        const newPosts = _.differenceBy(loadedPosts, watchedState.parsedPosts, 'postTitle');
-
-        const postsWithIds = newPosts.map((post) => ({
-          ...post,
-          postID: _.uniqueId(),
-          feedId: watchedState.parsedFeeds.find(f => f.feedsURL === link)?.id,
-        }));
-
-        if (postsWithIds.length > 0) {
-          watchedState.parsedPosts.unshift(...postsWithIds);
-        }
-      })
-      .catch((error) => {
-        console.error('Error updating posts:', error.message);
-      })
-  );
-
-  Promise.all(promises).finally(() => setTimeout(() => updatePosts(watchedState), 5000));
+  const downloadPromises = links.map((link) => downloadFeed(link)
+    .then((responce) => {
+      const parsedData = parseRSS(responce);
+      const newPosts = _.differenceBy(parsedData.loadedPosts, watchedState.parsedPosts, 'postTitle');
+      if (newPosts.length > 0) {
+        watchedState.parsedPosts = [...newPosts, ...watchedState.parsedPosts];
+      }
+    }));
+  Promise.all(downloadPromises)
+    .finally(setTimeout(() => updatePosts(watchedState), 5000));
 };
 
 export default () => {
   const defaultLanguage = 'ru';
   const i18n = i18next.createInstance();
-
   i18n.init({
     lng: defaultLanguage,
-    debug: false,
+    debug: true,
     resources,
   }).then(() => {
     yup.setLocale({
-      mixed: { notOneOf: 'Duplication Error' },
-      string: { url: 'Nonvalid URL Error' },
+      mixed: {
+        notOneOf: 'Duplication Error',
+      },
+      string: {
+        url: 'Nonvalid URL Error',
+      },
     });
 
-    const validateURL = (url, parsedLinks) => {
-      const schema = yup.string().url().notOneOf(parsedLinks).required();
+    const validateURL = async (url, parsedLinks) => {
+      const schema = yup
+        .string()
+        .url()
+        .notOneOf(parsedLinks)
+        .required();
       return schema.validate(url);
     };
 
@@ -73,16 +65,19 @@ export default () => {
       posts: document.querySelector('.posts'),
       feeds: document.querySelector('.feeds'),
       languageButtons: document.querySelectorAll('[data-lng]'),
+      modalButtons: document.querySelectorAll('[data-bs-toggle="modal"]'),
       title: document.querySelector('h1'),
       subtitle: document.querySelector('.lead'),
       inputPlaceholder: document.querySelector('[data-label]'),
       button: document.querySelector('[data-button]'),
       example: document.querySelector('[data-example]'),
-      hexlet: document.querySelector('[data-hexlet]'),
+      hexlet: document.querySelector('[data-hexlet'),
       modalWindow: {
         modalTitle: document.querySelector('.modal-title'),
         modalBody: document.querySelector('.modal-body'),
         modalFullArticle: document.querySelector('.full-article'),
+        modalCloseSecondary: document.querySelector('.btn-secondary'),
+        modalCloseButtons: document.querySelectorAll('[data-bs-dismiss="modal"]'),
       },
     };
 
@@ -99,14 +94,12 @@ export default () => {
       parsedPosts: [],
     };
 
-    const watchedState = onChange(state, (path, value, prev) => {
+    const watchedState = onChange(state, (path, value, previousValue) => {
       switch (path) {
         case 'loadingProcess':
-          handleFormAccessibility(elements, watchedState);
-          renderFeedback(elements, state, i18n);
-          break;
         case 'error':
-          handleErrors(state.error, watchedState);
+          handleFormAccessibility(elements, watchedState);
+          handleErrors(state.error, state);
           renderFeedback(elements, state, i18n);
           break;
         case 'parsedFeeds':
@@ -121,7 +114,7 @@ export default () => {
           break;
         case 'lng':
           i18n.changeLanguage(value);
-          renderLanguage(elements, value, prev, i18n);
+          renderLanguage(elements, value, previousValue, i18n);
           break;
         default:
           break;
@@ -133,63 +126,49 @@ export default () => {
       const data = new FormData(e.target);
       const currentURL = data.get('url').trim();
       watchedState.loadingProcess = 'loading';
-
-      const parsedLinks = watchedState.parsedFeeds.map(feed => feed.feedsURL);
-
+      const parsedLinks = watchedState.parsedFeeds.map((feed) => feed.feedsURL);
       validateURL(currentURL, parsedLinks)
         .then(() => downloadFeed(currentURL))
-        .then((response) => {
-          const { loadedFeeds, loadedPosts } = parseRSS(response, currentURL);
+        .then((responce) => {
+          const parsedResponce = parseRSS(responce, currentURL);
+          const feeds = parsedResponce.loadedFeeds;
+          const posts = parsedResponce.loadedPosts;
 
-          const feedId = _.uniqueId();
-          const feedWithId = {
-            ...loadedFeeds,
-            id: feedId,
-            feedsURL: currentURL,
-          };
-
-          const postsWithIds = loadedPosts.map((post) => ({
-            ...post,
-            postID: _.uniqueId(),
-            feedId,
-          }));
-
+          posts.forEach((post) => {
+            post.postID = _.uniqueId();
+          });
           watchedState.valid = true;
           watchedState.loadingProcess = 'success';
-          watchedState.error = '';
-          watchedState.parsedFeeds.unshift(feedWithId);
-          watchedState.parsedPosts.unshift(...postsWithIds);
+          watchedState.parsedFeeds.unshift(feeds);
+          watchedState.parsedPosts.unshift(...posts);
         })
         .catch((error) => {
           watchedState.valid = false;
-          watchedState.loadingProcess = 'failed';
-          watchedState.error = error.message;
+          watchedState.loadingProcess = 'failed loading';
+          handleErrors(error.message, watchedState);
         });
     });
 
     updatePosts(watchedState);
 
-    elements.languageButtons.forEach((btn) => {
-      btn.addEventListener('click', () => {
-        watchedState.lng = btn.dataset.lng;
+    elements.languageButtons.forEach((languageButton) => {
+      languageButton.addEventListener('click', () => {
+        watchedState.lng = languageButton.dataset.lng;
       });
     });
 
     elements.posts.addEventListener('click', (e) => {
       const { target } = e;
-      const link = target.closest('[href]');
-      const button = target.closest('[data-bs-toggle="modal"]');
-
-      if (link) {
-        watchedState.uiState.viewedLinks.push(link.href);
-      }
-
-      if (button) {
-        const postLink = button.previousElementSibling?.href || button.closest('a')?.href;
-        if (postLink) {
-          watchedState.uiState.viewedLinks.push(postLink);
-          watchedState.uiState.clickedPostLink = postLink;
-        }
+      switch (target.tagName) {
+        case 'A':
+          watchedState.uiState.viewedLinks.push(target.href);
+          break;
+        case 'BUTTON':
+          watchedState.uiState.viewedLinks.push(target.previousSibling.href);
+          watchedState.uiState.clickedPostLink = target.previousSibling.href;
+          break;
+        default:
+          break;
       }
     });
   });
