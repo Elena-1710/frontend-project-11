@@ -33,7 +33,7 @@ const updatePosts = (watchedState) => {
       if (newPosts.length > 0) {
         watchedState.parsedPosts = [...newPosts, ...watchedState.parsedPosts]
       }
-    })
+    }),
   )
   Promise.all(downloadPromises)
     .finally(() => setTimeout(() => updatePosts(watchedState), 5000))
@@ -52,9 +52,9 @@ const handleSubmit = (elements, watchedState) => (e) => {
       const parsedResponce = parseRSS(response, currentURL)
       const feeds = parsedResponce.loadedFeeds
       const posts = parsedResponce.loadedPosts
-
-      posts.forEach(post => { post.postID = _.uniqueId() })
-
+      posts.forEach((post) => {
+        post.postID = _.uniqueId()
+      })
       watchedState.valid = true
       watchedState.loadingProcess = 'success'
       watchedState.parsedFeeds.unshift(feeds)
