@@ -60,16 +60,12 @@ const renderFeedback = (elements, state, i18n) => {
       break
     case (!state.valid && !_.isEmpty(state.error)):
       elements.feedback.textContent = i18n.t(`${state.error}`)
-      elements.feedback.classList.add('text-danger')
+      elements.feedback.setAttribute('data-link-message', `${state.error}`)
       break
     case (state.loadingProcess === 'success'):
       elements.feedback.textContent = i18n.t('validation.valid.success')
-      elements.feedback.classList.remove('text-danger')
-      elements.feedback.classList.add('text-success')
+      elements.feedback.setAttribute('data-link-message', 'validation.valid.success')
       elements.form.reset()
-
-      // Автоматическое обновление ленты после успешной загрузки
-      renderFeed(elements, state, i18n)
       break
     default:
       break
@@ -97,7 +93,7 @@ const renderFeedsContainer = (elements, i18n) => {
   feedsCard.append(feedsCardBody, feedsListGroup)
   elements.feeds.append(feedsCard)
 
-  return feedsListGroup // <-- ВАЖНО: возвращаем ul
+  return feedsListGroup
 }
 
 const renderFeedsList = (feed, listGroup) => {
@@ -108,7 +104,7 @@ const renderFeedsList = (feed, listGroup) => {
 
   const li = document.createElement('li')
   li.classList.add('list-group-item', 'border-0', 'border-end-0')
-  li.setAttribute('data-feed-id', id) // <-- добавляем data-feed-id
+  li.setAttribute('data-feed-id', id)
 
   const h3 = document.createElement('h3')
   h3.classList.add('h6', 'm-0')
@@ -119,12 +115,11 @@ const renderFeedsList = (feed, listGroup) => {
   p.textContent = feedsDescription || 'No description'
 
   li.append(h3, p)
-  listGroup.append(li) // или prepend(li) если надо сверху
+  listGroup.append(li)
 }
 
 const renderFeed = (elements, state, i18n) => {
-  const listGroup = renderFeedsContainer(elements, i18n) // получаем ul
-
+  const listGroup = renderFeedsContainer(elements, i18n)
   state.parsedFeeds.forEach((feed) => {
     renderFeedsList(feed, listGroup)
   })
@@ -145,19 +140,23 @@ const renderPostsContainer = (elements, i18n) => {
   postsCardTitle.textContent = i18n.t('interface.posts')
 
   postsCardBody.append(postsCardTitle)
-  postsCard.prepend(postsCardBody, postsListGroup)
+  postsCard.append(postsCardBody, postsListGroup)
+  elements.posts.append(postsCard)
 
-  elements.posts.prepend(postsCard)
+  return postsListGroup
 }
 
-const renderPostsList = (state, post, i18n) => {
-  const { postTitle, postLink, postID } = post
+const renderPostsList = (state, post, i18n, listGroup) => {
+  const { postTitle, postLink } = post
 
   const li = document.createElement('li')
-  const a = document.createElement('a')
-  const modalButton = document.createElement('button')
-  const postsListGroup = document.querySelector('.posts > .card > ul')
+  li.classList.add('list-group-item', 'd-flex', 'justify-content-between', 'align-items-start', 'border-0', 'border-end-0')
 
+  const a = document.createElement('a')
+  a.href = postLink
+  a.target = '_blank'
+  a.rel = 'noopener noreferrer'
+  a.textContent = postTitle
   if (state.uiState.viewedLinks.includes(postLink)) {
     a.classList.add('fw-normal', 'link-secondary')
   }
@@ -165,79 +164,63 @@ const renderPostsList = (state, post, i18n) => {
     a.classList.add('fw-bold')
   }
 
-  li.classList.add('list-group-item', 'd-flex', 'justify-content-between', 'align-items-start', 'border-0', 'border-end-0')
-  a.setAttribute('href', postLink)
-  a.setAttribute('data-id', postID)
-  a.setAttribute('target', '_blank')
-  a.setAttribute('rel', 'noopener noreferrer')
+  const button = document.createElement('button')
+  button.type = 'button'
+  button.classList.add('btn', 'btn-outline-primary', 'btn-sm')
+  button.dataset.bsToggle = 'modal'
+  button.dataset.bsTarget = '#modal'
+  button.textContent = i18n.t('interface.view')
 
-  a.textContent = postTitle
-
-  modalButton.classList.add('btn', 'btn-outline-primary', 'btn-sm')
-  modalButton.setAttribute('type', 'button')
-  modalButton.setAttribute('data-id', postID)
-  modalButton.setAttribute('data-bs-toggle', 'modal')
-  modalButton.setAttribute('data-bs-target', '#modal')
-
-  modalButton.textContent = i18n.t('interface.view')
-
-  li.append(a)
-  li.append(modalButton)
-  postsListGroup.append(li)
+  li.append(a, button)
+  listGroup.append(li)
 }
 
 const renderPosts = (elements, state, i18n) => {
-  renderPostsContainer(elements, i18n)
+  const listGroup = renderPostsContainer(elements, i18n)
   state.parsedPosts.forEach((post) => {
-    renderPostsList(state, post, i18n)
+    renderPostsList(state, post, i18n, listGroup)
   })
 }
 
 const renderModals = (elements, state) => {
-  const {
-    modalTitle, modalBody, modalFullArticle,
-  } = elements.modalWindow
+  const { modalTitle, modalBody, modalFullArticle } = elements.modalWindow
+  const post = state.parsedPosts.find(p => p.postLink === state.uiState.clickedPostLink)
 
-  const findPost = state.parsedPosts
-    .filter(({ postLink }) => postLink === state.uiState.clickedPostLink)
-  const [{ postTitle, postDescription, postLink }] = findPost
+  if (!post) return
 
-  modalTitle.textContent = postTitle
-  modalBody.textContent = postDescription
-  modalFullArticle.href = postLink
+  modalTitle.textContent = post.postTitle
+  modalBody.textContent = post.postDescription
+  modalFullArticle.href = post.postLink
 }
 
 const renderLanguage = (elements, value, previousValue, i18n) => {
-  const previousLangButton = document.querySelector(`[data-lng="${previousValue}"]`)
-  const activeLangButton = document.querySelector(`[data-lng="${value}"]`)
-  const feedbackMessage = document.querySelector('[data-link-message]')
+  document.querySelector(`[data-lng="${previousValue}"]`)
+    ?.classList.replace('btn-primary', 'btn-outline-primary')
+  document.querySelector(`[data-lng="${value}"]`)
+    ?.classList.replace('btn-outline-primary', 'btn-primary')
 
-  previousLangButton.classList.replace('btn-primary', 'btn-outline-primary')
-  activeLangButton.classList.replace('btn-outline-primary', 'btn-primary')
-
-  const feedbackMessageDataset = feedbackMessage.dataset.linkMessage
   elements.title.textContent = i18n.t('interface.title')
   elements.subtitle.textContent = i18n.t('interface.subtitle')
-  elements.inputPlaceholder.textContent = i18n.t('interface.placeholder')
   elements.button.textContent = i18n.t('interface.button')
   elements.example.textContent = i18n.t('interface.example')
-  elements.hexlet.textContent = i18n.t('interface.hexlet')
-  elements.feedback.textContent = i18n.t(feedbackMessageDataset)
 
-  const feeds = document.querySelector('.feeds > .card > .card-body > .card-title')
-  const posts = document.querySelector('.posts > .card > .card-body > .card-title')
-  if (feeds || posts) {
-    feeds.textContent = i18n.t('interface.feeds')
-    posts.textContent = i18n.t('interface.posts')
-    const modalButtons = document.querySelectorAll('[data-bs-toggle="modal"]')
-    modalButtons.forEach((button) => {
-      button.textContent = i18n.t('interface.view')
-    })
-    const modalFullArticle = document.querySelector('[data-full-article]')
-    const modalCloseButton = document.querySelector('[data-close-button]')
-    modalFullArticle.textContent = i18n.t('interface.modalWindow.fullArticle')
-    modalCloseButton.textContent = i18n.t('interface.modalWindow.closeModal')
+  const feedbackMessage = elements.feedback.dataset.linkMessage
+  if (feedbackMessage) {
+    elements.feedback.textContent = i18n.t(feedbackMessage)
   }
+
+  document.querySelectorAll('.feeds .card-title, .posts .card-title').forEach((el) => {
+    if (el.closest('.feeds')) {
+      el.textContent = i18n.t('interface.feeds')
+    }
+    else {
+      el.textContent = i18n.t('interface.posts')
+    }
+  })
+
+  document.querySelectorAll('[data-bs-toggle="modal"]').forEach((btn) => {
+    btn.textContent = i18n.t('interface.view')
+  })
 }
 
 export {

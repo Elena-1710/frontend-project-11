@@ -16,20 +16,20 @@ import {
 
 const downloadFeed = url => axios
   .get(`https://allorigins.hexlet.app/get?disableCache=true&url=${encodeURIComponent(url)}`)
-  .then(responce => responce.data.contents)
+  .then(response => response.data.contents)
 
 const updatePosts = (watchedState) => {
   const links = watchedState.parsedFeeds.map(feed => feed.feedsURL)
   const downloadPromises = links.map(link => downloadFeed(link)
-    .then((responce) => {
-      const parsedData = parseRSS(responce)
+    .then((response) => {
+      const parsedData = parseRSS(response)
       const newPosts = _.differenceBy(parsedData.loadedPosts, watchedState.parsedPosts, 'postTitle')
       if (newPosts.length > 0) {
         watchedState.parsedPosts = [...newPosts, ...watchedState.parsedPosts]
       }
     }))
   Promise.all(downloadPromises)
-    .finally(setTimeout(() => updatePosts(watchedState), 5000))
+    .finally(() => setTimeout(() => updatePosts(watchedState), 5000))
 }
 
 export default () => {
@@ -68,10 +68,10 @@ export default () => {
       modalButtons: document.querySelectorAll('[data-bs-toggle="modal"]'),
       title: document.querySelector('h1'),
       subtitle: document.querySelector('.lead'),
-      inputPlaceholder: document.querySelector('[data-label]'),
-      button: document.querySelector('[data-button]'),
-      example: document.querySelector('[data-example]'),
-      hexlet: document.querySelector('[data-hexlet'),
+      inputPlaceholder: document.querySelector('label[for="url-input"]'),
+      button: document.querySelector('.rss-form button[type="submit"]'),
+      example: document.querySelector('p.mt-2'),
+      hexlet: document.querySelector('footer a[href*="hexlet"]'),
       modalWindow: {
         modalTitle: document.querySelector('.modal-title'),
         modalBody: document.querySelector('.modal-body'),
@@ -129,8 +129,8 @@ export default () => {
       const parsedLinks = watchedState.parsedFeeds.map(feed => feed.feedsURL)
       validateURL(currentURL, parsedLinks)
         .then(() => downloadFeed(currentURL))
-        .then((responce) => {
-          const parsedResponce = parseRSS(responce, currentURL)
+        .then((response) => {
+          const parsedResponce = parseRSS(response, currentURL)
           const feeds = parsedResponce.loadedFeeds
           const posts = parsedResponce.loadedPosts
 
@@ -159,16 +159,20 @@ export default () => {
 
     elements.posts.addEventListener('click', (e) => {
       const { target } = e
-      switch (target.tagName) {
-        case 'A':
-          watchedState.uiState.viewedLinks.push(target.href)
-          break
-        case 'BUTTON':
-          watchedState.uiState.viewedLinks.push(target.previousSibling.href)
-          watchedState.uiState.clickedPostLink = target.previousSibling.href
-          break
-        default:
-          break
+
+      if (target.tagName === 'A') {
+        watchedState.uiState.viewedLinks.push(target.href)
+      }
+
+      if (target.tagName === 'BUTTON') {
+        const li = target.closest('li')
+        const link = li.querySelector('a')
+
+        if (link) {
+          const href = link.getAttribute('href')
+          watchedState.uiState.viewedLinks.push(href)
+          watchedState.uiState.clickedPostLink = href
+        }
       }
     })
   })
